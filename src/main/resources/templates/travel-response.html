@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>여행 계획 결과</title>
+</head>
+<body>
+<h1>여행 계획 JSON</h1>
+
+<div style="white-space: pre; border: 1px solid #ccc; padding: 10px; margin-bottom: 20px;"
+     th:text="${travelPlanJson}"></div>
+
+<a th:href="@{/travel}">다시 여행계획 생성하기</a>
+</body>
+</html>

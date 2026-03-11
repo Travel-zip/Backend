@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>여행 계획 생성</title>
+    <style>
+        /* 리스트 공통 스타일 */
+        .attraction-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 5px 0;
+            cursor: pointer;
+            background-color: #f9f9f9;
+            display: flex;
+            align-items: center;
+        }
+        .attraction-item:hover { background-color: #e0e0e0; }
+
+        .attraction-img {
+            width: 60px; height: 60px; object-fit: cover;
+            margin-right: 15px; border-radius: 5px; background-color: #eee;
+        }
+
+        /* 선택 강조(카테고리별로 따로 선택되게 data-category로 제어) */
+        .selected {
+            border: 2px solid #007bff;
+            background-color: #e7f1ff;
+        }
+
+        /* 섹션 구분 */
+        .section-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .loading {
+            color: gray;
+            font-style: italic;
+            display: none;
+            margin-top: 6px;
+        }
+
+        /* 검색 섹션 스타일 */
+        .search-box {
+            border: 1px dashed #bbb;
+            padding: 10px;
+            margin-top: 12px;
+            background: #fafafa;
+        }
+
+        /* 음성→텍스트 섹션 스타일 */
+        .voice-box {
+            border: 1px dashed #bbb;
+            padding: 10px;
+            margin-top: 12px;
+            background: #fdfdfd;
+        }
+        .voice-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .hint {
+            color: #666;
+            font-size: 12px;
+        }
+        .interim {
+            margin-top: 8px;
+            color: #999;
+            font-style: italic;
+        }
+
+        /* 테스트 패널 스타일 */
+        .test-box {
+            border: 2px dashed #9aa;
+            padding: 12px;
+            margin-top: 12px;
+            background: #fbfdff;
+        }
+        .test-row {
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            align-items:center;
+            margin: 6px 0;
+        }
+        .chip {
+            display:inline-flex;
+            align-items:center;
+            gap:6px;
+            padding:6px 10px;
+            border:1px solid #ccd;
+            border-radius:999px;
+            background:#fff;
+            font-size:13px;
+            cursor:pointer;
+            user-select:none;
+        }
+        .chip input { margin:0; }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            color:#444;
+        }
+        .detail-card {
+            border:1px solid #ddd;
+            padding:10px;
+            border-radius:8px;
+            background:#fff;
+            margin-top:8px;
+        }
+        .detail-img {
+            width: 180px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 6px;
+            border:1px solid #eee;
+            background:#f2f2f2;
+        }
+    </style>
+</head>
+<body>
+<h1>여행 계획 최신화</h1>
+
+<form th:action="@{/travel}" method="post">
+    <label for="roomId">채팅방 ID (roomId):</label>
+    <input type="text" id="roomId" name="roomId" value="jeju-trip-2025"><br><br>
+
+    <h3>📍 지역 선택 (공공데이터 TourAPI)</h3>
+
+    <div>
+        <label for="regionSelect">지역(광역) 선택:</label>
+        <!-- 지역 선택 시: 시군구 목록 먼저 로드 후 → 3종 리스트 로드 -->
+        <select id="regionSelect" onchange="onAreaChange()">
+            <option value="">지역을 선택하세요</option>
+
+            <option value="1">서울</option>
+            <option value="2">인천</option>
+            <option value="3">대전</option>
+            <option value="4">대구</option>
+            <option value="5">광주</option>
+            <option value="6">부산</option>
+            <option value="7">울산</option>
+            <option value="8">세종</option>
+
+            <option value="31">경기도</option>
+            <option value="32">강원도</option>
+            <option value="33">충청북도</option>
+            <option value="34">충청남도</option>
+            <option value="35">경상북도</option>
+            <option value="36">경상남도</option>
+            <option value="37">전라북도</option>
+            <option value="38">전라남도</option>
+            <option value="39">제주도</option>
+        </select>
+    </div>
+
+    <!-- 시군구 선택 -->
+    <div style="margin-top:8px;">
+        <label for="sigunguSelect">시/군/구 선택:</label>
+        <select id="sigunguSelect" onchange="loadAll()" disabled>
+            <option value="">(먼저 지역을 선택하세요)</option>
+        </select>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- Nearby/Detail 테스트 패널 -->
+    <!-- ===================================================== -->
+    <div class="test-box">
+        <h3>🧪 (테스트) Nearby 조회 / 상세조회</h3>
+        <p class="hint">
+            - Nearby: <span class="mono">/api/places/nearby</span><br>
+            - Detail(좌표): <span class="mono">/api/place/detail?lat=...&lng=...</span><br>
+            - Detail(contentId): <span class="mono">/api/place/detail?contentId=...</span>
+            <!--  이 HTML은 "contentId로 상세조회"가 백엔드에 구현돼 있어야 정확히 동작함 -->
+        </p>
+
+        <div class="test-row">
+            <label>중심 위도(lat):</label>
+            <input id="tLat" type="number" step="0.000001" value="33.450701" style="width:150px;">
+
+            <label>중심 경도(lng):</label>
+            <input id="tLng" type="number" step="0.000001" value="126.570667" style="width:150px;">
+
+            <label>반경(m):</label>
+            <input id="tRadius" type="number" step="10" value="2000" style="width:110px;">
+
+            <button type="button" onclick="testNearby()">Nearby 조회</button>
+            <button type="button" onclick="testDetail()">좌표 상세 조회</button>
+            <button type="button" onclick="clearTest()">결과 지우기</button>
+        </div>
+
+        <div class="test-row">
+            <b>카테고리:</b>
+
+            <label class="chip"><input type="checkbox" name="tCat" value="attraction" checked>관광지</label>
+            <label class="chip"><input type="checkbox" name="tCat" value="culture">문화시설</label>
+            <label class="chip"><input type="checkbox" name="tCat" value="festival">행사/공연/축제</label>
+            <label class="chip"><input type="checkbox" name="tCat" value="leports">레포츠</label>
+            <label class="chip"><input type="checkbox" name="tCat" value="stay">숙박</label>
+            <label class="chip"><input type="checkbox" name="tCat" value="shopping">쇼핑</label>
+            <label class="chip"><input type="checkbox" name="tCat" value="food" checked>음식점</label>
+        </div>
+
+        <div id="testLoading" class="loading">📡 테스트 API 호출 중...</div>
+
+        <div class="section-box" style="margin-top:10px;">
+            <h4>📍 Nearby 결과 (클릭하면 그 contentId로 상세조회)</h4>
+            <div id="nearbyList" style="max-height: 220px; overflow-y: auto;">
+                <p class="hint">Nearby 조회를 누르면 결과가 나옵니다.</p>
+            </div>
+        </div>
+
+        <div class="section-box" style="margin-top:10px;">
+            <h4>🔎 상세 결과</h4>
+            <div id="detailBox">
+                <p class="hint">상세 조회를 누르면 결과가 나옵니다.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- 이름으로 상세조회 UI -->
+    <!-- ===================================================== -->
+    <div class="section-box" style="margin-top:10px;">
+        <h4>🔤 이름으로 상세 조회</h4>
+
+        <div class="test-row">
+            <label>장소 이름(name):</label>
+            <input id="tName" type="text" placeholder="예: 성산일출봉, 동문시장" style="width:260px;">
+            <button type="button" onclick="testDetailByName()">이름 상세 조회</button>
+        </div>
+
+        <p class="hint">※ 동명이 있을 수 있어요. 우선은 검색 결과 중 가장 적절한 1개를 자동 선택합니다.</p>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- 검색 UI (검색어만 입력해도 전국 검색 가능) -->
+    <!-- ===================================================== -->
+    <!-- 검색 UI (검색어만 입력해도 전국 검색 가능) -->
+    <div class="search-box">
+        <h3>🔎 장소 검색 (카테고리 선택 + 이름 입력)</h3>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <label for="searchCategory">카테고리:</label>
+
+            <select id="searchCategory">
+                <!-- 7개 카테고리로 확장 (값은 contentTypeId 숫자) -->
+                <option value="12">관광지</option>
+                <option value="14">문화시설</option>
+                <option value="15">축제/공연/행사</option>
+                <option value="28">레포츠</option>
+                <option value="32">숙박</option>
+                <option value="38">쇼핑</option>
+                <option value="39">음식점</option>
+            </select>
+
+            <label for="searchKeyword">검색어:</label>
+            <input id="searchKeyword" type="text"
+                   placeholder="예: 경복궁, 해운대해수욕장, 성산일출봉"
+                   style="width:320px;">
+
+            <!--  반경 검색 필수 입력 -->
+            <label for="searchLat">lat:</label>
+            <input id="searchLat" type="number" step="0.000001" style="width:140px;" placeholder="예: 33.450701">
+
+            <label for="searchLng">lng:</label>
+            <input id="searchLng" type="number" step="0.000001" style="width:140px;" placeholder="예: 126.570667">
+
+            <label for="searchRadius">반경(m):</label>
+            <input id="searchRadius" type="number" step="10" style="width:110px;" placeholder="예: 2000">
+
+            <!--  테스트 패널 값(tLat/tLng/tRadius)에서 자동 복사 -->
+            <button type="button" onclick="fillSearchFromTest()">테스트값 복사</button>
+
+            <button type="button" onclick="searchPlaces()">검색</button>
+            <button type="button" onclick="clearSearch()">검색 결과 지우기</button>
+        </div>
+
+        <div id="searchLoading" class="loading">📡 검색 중...</div>
+
+        <div id="searchResultList" style="max-height: 240px; overflow-y: scroll; margin-top:8px;">
+            <p style="color:#666;">검색어를 입력하고 검색하면 결과가 여기에 표시됩니다.</p>
+        </div>
+
+        <p id="searchSelectedStatus" style="color: blue; font-weight: bold;"></p>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- 음성채팅 → 실시간 텍스트 -->
+    <!-- ===================================================== -->
+    <div class="voice-box">
+        <h3>🎙️ 음성채팅 → 실시간 텍스트</h3>
+
+        <div class="voice-row">
+            <label for="voiceNickname">닉네임:</label>
+            <input id="voiceNickname" type="text" placeholder="예: 철수" style="width:140px;">
+
+            <button type="button" id="btnMic" onclick="toggleMic()">마이크 켜기</button>
+            <span id="micStatus" class="hint">(꺼짐)</span>
+
+            <span class="hint">※ Chrome 권장 / 배포 환경은 HTTPS 필요</span>
+        </div>
+
+        <div id="interimText" class="interim"></div>
+    </div>
+
+    <!-- ===================================================== -->
+    <!-- GPT가 추출한 장소 누적 표시 -->
+    <!-- ===================================================== -->
+    <div class="section-box">
+        <h3>🧠 채팅에서 추출된 장소(자동 누적)</h3>
+        <p class="hint">채팅이 <b>6줄</b> 쌓이거나, 마지막 메시지 이후 <b>2.5초</b> 지나면 자동 추출됩니다.</p>
+
+        <div>
+            <b>장소 목록</b>
+            <ul id="exPlaces"></ul>
+        </div>
+    </div>
+
+    <!-- ===================== 관광명소 ===================== -->
+    <div class="section-box">
+        <h3>🗺️ 관광명소</h3>
+        <div id="loadingAttractions" class="loading">📡 관광명소 불러오는 중...</div>
+        <div id="attractionList" style="max-height: 240px; overflow-y: scroll;">
+            <p>지역을 선택하면 관광명소가 로드됩니다.</p>
+        </div>
+        <p id="selectionStatusAttraction" style="color: blue; font-weight: bold;"></p>
+    </div>
+
+    <!-- ===================== 맛집(음식점) ===================== -->
+    <div class="section-box">
+        <h3>🍜 맛집(음식점)</h3>
+        <div id="loadingRestaurants" class="loading">📡 맛집 불러오는 중...</div>
+        <div id="restaurantList" style="max-height: 240px; overflow-y: scroll;">
+            <p>지역을 선택하면 맛집이 로드됩니다.</p>
+        </div>
+        <p id="selectionStatusRestaurant" style="color: blue; font-weight: bold;"></p>
+    </div>
+
+    <!-- ===================== 숙박 ===================== -->
+    <div class="section-box">
+        <h3>🏨 숙박</h3>
+        <div id="loadingStays" class="loading">📡 숙박 불러오는 중...</div>
+        <div id="stayList" style="max-height: 240px; overflow-y: scroll;">
+            <p>지역을 선택하면 숙박업소가 로드됩니다.</p>
+        </div>
+        <p id="selectionStatusStay" style="color: blue; font-weight: bold;"></p>
+    </div>
+
+    <!-- ===================== Hidden Inputs (Form 전송용) ===================== -->
+    <!-- 관광명소 -->
+    <input type="hidden" id="selectedPlaceName" name="selectedPlaceName">
+    <input type="hidden" id="selectedLat" name="selectedLat">
+    <input type="hidden" id="selectedLng" name="selectedLng">
+
+    <!-- 맛집 -->
+    <input type="hidden" id="selectedRestaurantName" name="selectedRestaurantName">
+    <input type="hidden" id="selectedRestaurantLat" name="selectedRestaurantLat">
+    <input type="hidden" id="selectedRestaurantLng" name="selectedRestaurantLng">
+
+    <!-- 숙박 -->
+    <input type="hidden" id="selectedStayName" name="selectedStayName">
+    <input type="hidden" id="selectedStayLat" name="selectedStayLat">
+    <input type="hidden" id="selectedStayLng" name="selectedStayLng">
+
+    <br><hr><br>
+
+    <label for="chatLog">여행 관련 채팅 로그:</label><br>
+    <textarea id="chatLog" name="chatLog" rows="15" cols="80"
+              placeholder="예시)&#10;사용자1: 11월 초에 제주도 1박2일 어때? 성산일출봉이랑 한라산 가고 싶어.&#10;사용자2: 공항 도착하면 함덕 쪽으로 먼저 가서 밥 먹자.&#10;사용자3: 숙소는 성산 쪽 호텔로 잡자.&#10;사용자2: 공항에서 렌트카 빌리자.&#10;사용자1: 다음날은 버스 타고 한라산 가자.&#10;..."></textarea>
+    <br><br>
+
+    <button type="submit">여행계획 최신화</button>
+</form>
+
+<script>
+    // ============================================================
+    //  지역 변경 시: 시군구 목록 로드 → 그 다음 관광/맛집/숙박 로드
+    // ============================================================
+    function onAreaChange() {
+        loadSigungu().then(() => loadAll());
+    }
+
+    // 시군구 목록 로드
+    function loadSigungu() {
+        const areaCode = document.getElementById("regionSelect").value;
+        const sigunguSelect = document.getElementById("sigunguSelect");
+
+        sigunguSelect.innerHTML = "";
+        sigunguSelect.disabled = true;
+
+        if (!areaCode) {
+            sigunguSelect.innerHTML = `<option value="">(먼저 지역을 선택하세요)</option>`;
+            return Promise.resolve();
+        }
+
+        // 전체 옵션
+        sigunguSelect.innerHTML = `<option value="">전체(시군구 미지정)</option>`;
+
+        return fetch('/api/sigungu?areaCode=' + encodeURIComponent(areaCode))
+            .then(res => res.json())
+            .then(list => {
+                if (!list || list.length === 0) return;
+
+                list.forEach(s => {
+                    const opt = document.createElement("option");
+                    opt.value = s.code;      // sigunguCode
+                    opt.textContent = s.name;
+                    sigunguSelect.appendChild(opt);
+                });
+
+                sigunguSelect.disabled = false;
+            })
+            .catch(err => {
+                console.error(err);
+                sigunguSelect.innerHTML = `<option value="">시군구 로드 실패</option>`;
+            });
+    }
+
+    // areaCode + sigunguCode(선택) 기반으로 URL 만들기
+    function buildUrl(basePath, areaCode) {
+        const sigunguCode = document.getElementById("sigunguSelect").value;
+
+        let url = basePath + '?areaCode=' + encodeURIComponent(areaCode);
+        if (sigunguCode) {
+            url += '&sigunguCode=' + encodeURIComponent(sigunguCode);
+        }
+        return url;
+    }
+
+    // 지역/시군구 기준으로 3종 모두 로드
+    function loadAll() {
+        const areaCode = document.getElementById("regionSelect").value;
+        if (!areaCode) {
+            document.getElementById("attractionList").innerHTML = "<p>지역을 선택해주세요.</p>";
+            document.getElementById("restaurantList").innerHTML = "<p>지역을 선택해주세요.</p>";
+            document.getElementById("stayList").innerHTML = "<p>지역을 선택해주세요.</p>";
+            return;
+        }
+
+        loadCategory({
+            url: buildUrl('/api/attractions', areaCode),
+            listId: 'attractionList',
+            loadingId: 'loadingAttractions',
+            category: 'attraction',
+            statusId: 'selectionStatusAttraction',
+            onSelect: (place) => {
+                document.getElementById("selectedPlaceName").value = place.title;
+                document.getElementById("selectedLat").value = place.mapy;
+                document.getElementById("selectedLng").value = place.mapx;
+                document.getElementById("selectionStatusAttraction").innerText =
+                    "✅ 관광명소 선택됨: " + place.title + " (일정에 우선 반영)";
+            }
+        });
+
+        loadCategory({
+            url: buildUrl('/api/restaurants', areaCode),
+            listId: 'restaurantList',
+            loadingId: 'loadingRestaurants',
+            category: 'restaurant',
+            statusId: 'selectionStatusRestaurant',
+            onSelect: (place) => {
+                document.getElementById("selectedRestaurantName").value = place.title;
+                document.getElementById("selectedRestaurantLat").value = place.mapy;
+                document.getElementById("selectedRestaurantLng").value = place.mapx;
+                document.getElementById("selectionStatusRestaurant").innerText =
+                    "✅ 맛집 선택됨: " + place.title + " (식사 동선에 반영)";
+            }
+        });
+
+        loadCategory({
+            url: buildUrl('/api/stays', areaCode),
+            listId: 'stayList',
+            loadingId: 'loadingStays',
+            category: 'stay',
+            statusId: 'selectionStatusStay',
+            onSelect: (place) => {
+                document.getElementById("selectedStayName").value = place.title;
+                document.getElementById("selectedStayLat").value = place.mapy;
+                document.getElementById("selectedStayLng").value = place.mapx;
+                document.getElementById("selectionStatusStay").innerText =
+                    "✅ 숙박 선택됨: " + place.title + " (숙박 동선에 반영)";
+            }
+        });
+    }
+
+    // 카테고리 공통 로더/렌더러
+    function loadCategory({url, listId, loadingId, category, statusId, onSelect}) {
+        const listContainer = document.getElementById(listId);
+        const loading = document.getElementById(loadingId);
+
+        listContainer.innerHTML = "";
+        document.getElementById(statusId).innerText = "";
+        loading.style.display = "block";
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                loading.style.display = "none";
+
+                if (!data || data.length === 0) {
+                    listContainer.innerHTML = "<p>검색 결과가 없습니다.</p>";
+                    return;
+                }
+
+                data.forEach(place => {
+                    const div = document.createElement("div");
+                    div.className = "attraction-item";
+                    div.setAttribute("data-category", category);
+
+                    const imgSrc = place.firstimage ? place.firstimage : '';
+                    const imgTag = imgSrc
+                        ? `<img src="${imgSrc}" class="attraction-img">`
+                        : `<div class="attraction-img" style="display:flex; align-items:center; justify-content:center; font-size:12px;">No Img</div>`;
+
+                    div.innerHTML = `
+                        ${imgTag}
+                        <div>
+                          <strong>${place.title}</strong><br>
+                          <span style="font-size: 12px; color: #666;">${place.addr1 || '주소 정보 없음'}</span>
+                        </div>
+                    `;
+
+                    div.onclick = function() {
+                        document
+                            .querySelectorAll('.attraction-item[data-category="' + category + '"]')
+                            .forEach(item => item.classList.remove('selected'));
+
+                        div.classList.add('selected');
+                        onSelect(place);
+                    };
+
+                    listContainer.appendChild(div);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                loading.style.display = "none";
+                listContainer.innerHTML = "<p style='color:red;'>데이터 로드 실패 (API 키/트래픽/파라미터 확인)</p>";
+            });
+    }
+
+    // ============================================================
+    // 검색 기능 (지역 선택 없이도 검색어만으로 전국 검색)
+    // ============================================================
+    function clearSearch() {
+        document.getElementById("searchResultList").innerHTML =
+            `<p style="color:#666;">검색어를 입력하고 검색하면 결과가 여기에 표시됩니다.</p>`;
+        document.getElementById("searchSelectedStatus").innerText = "";
+    }
+
+    //  검색 카테고리(contentTypeId)를 "기존 3종 hidden input"에 매핑
+    function mapSearchCategoryToBucket(catValue) {
+        const c = String(catValue || "").trim().toLowerCase();
+
+        // 음식점
+        if (c === "39" || c === "food" || c === "restaurant") return "restaurant";
+
+        // 숙박
+        if (c === "32" || c === "stay") return "stay";
+
+        // 나머지(관광지/문화시설/축제/레포츠/쇼핑)는 "관광(필수 방문 장소)"로 처리
+        return "place";
+    }
+
+    // 테스트 패널 입력(tLat/tLng/tRadius) → 검색 입력칸으로 복사
+    function fillSearchFromTest() {
+        const tLat = document.getElementById("tLat")?.value;
+        const tLng = document.getElementById("tLng")?.value;
+        const tRadius = document.getElementById("tRadius")?.value;
+
+        if (tLat) document.getElementById("searchLat").value = tLat;
+        if (tLng) document.getElementById("searchLng").value = tLng;
+        if (tRadius) document.getElementById("searchRadius").value = tRadius;
+    }
+
+    function searchPlaces() {
+        const keyword = document.getElementById("searchKeyword").value.trim();
+        const category = document.getElementById("searchCategory").value; //  이제 12/14/.../39 숫자 들어옴
+
+        //  반경 검색 필수값
+        const lat = Number(document.getElementById("searchLat").value);
+        const lng = Number(document.getElementById("searchLng").value);
+        const radius = Number(document.getElementById("searchRadius").value);
+
+        if (!keyword) {
+            document.getElementById("searchSelectedStatus").innerText = "⚠️ 검색어를 입력하세요.";
+            return;
+        }
+
+        //  좌표/반경 미입력 방지
+        if (Number.isNaN(lat) || Number.isNaN(lng) || Number.isNaN(radius)) {
+            document.getElementById("searchSelectedStatus").innerText =
+                "⚠️ lat/lng/반경(m)을 모두 입력하세요. (전국 검색은 허용하지 않습니다)";
+            return;
+        }
+
+
+        const loading = document.getElementById("searchLoading");
+        const listContainer = document.getElementById("searchResultList");
+
+        loading.style.display = "block";
+        listContainer.innerHTML = "";
+
+        // lat/lng/radius를 함께 전송
+        const url =
+            `/api/search?category=${encodeURIComponent(category)}&keyword=${encodeURIComponent(keyword)}`
+            + `&lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&radius=${encodeURIComponent(radius)}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                loading.style.display = "none";
+
+                if (!data || data.length === 0) {
+                    listContainer.innerHTML = "<p>검색 결과가 없습니다.</p>";
+                    return;
+                }
+
+                data.forEach(place => {
+                    const div = document.createElement("div");
+                    div.className = "attraction-item";
+                    div.setAttribute("data-category", "search");
+
+                    const imgSrc = place.firstimage ? place.firstimage : '';
+                    const imgTag = imgSrc
+                        ? `<img src="${imgSrc}" class="attraction-img">`
+                        : `<div class="attraction-img" style="display:flex; align-items:center; justify-content:center; font-size:12px;">No Img</div>`;
+
+                    div.innerHTML = `
+                    ${imgTag}
+                    <div>
+                      <strong>${place.title}</strong><br>
+                      <span style="font-size: 12px; color: #666;">${place.addr1 || '주소 정보 없음'}</span><br>
+                      <span style="font-size: 12px; color: #999;">(위도:${place.mapy}, 경도:${place.mapx})</span>
+                    </div>
+                `;
+
+                    div.onclick = function() {
+                        document
+                            .querySelectorAll('.attraction-item[data-category="search"]')
+                            .forEach(item => item.classList.remove('selected'));
+                        div.classList.add('selected');
+
+                        const bucket = mapSearchCategoryToBucket(category);
+
+                        // 7개 카테고리를 기존 3종 hidden input에 넣기
+                        if (bucket === "place") {
+                            document.getElementById("selectedPlaceName").value = place.title;
+                            document.getElementById("selectedLat").value = place.mapy;
+                            document.getElementById("selectedLng").value = place.mapx;
+
+                            document.getElementById("selectionStatusAttraction").innerText =
+                                "✅ (검색 선택) 방문 장소: " + place.title;
+                        } else if (bucket === "restaurant") {
+                            document.getElementById("selectedRestaurantName").value = place.title;
+                            document.getElementById("selectedRestaurantLat").value = place.mapy;
+                            document.getElementById("selectedRestaurantLng").value = place.mapx;
+
+                            document.getElementById("selectionStatusRestaurant").innerText =
+                                "✅ (검색 선택) 음식점: " + place.title;
+                        } else if (bucket === "stay") {
+                            document.getElementById("selectedStayName").value = place.title;
+                            document.getElementById("selectedStayLat").value = place.mapy;
+                            document.getElementById("selectedStayLng").value = place.mapx;
+
+                            document.getElementById("selectionStatusStay").innerText =
+                                "✅ (검색 선택) 숙박: " + place.title;
+                        }
+
+                        document.getElementById("searchSelectedStatus").innerText =
+                            `✅ 선택됨: ${place.title} (위도:${place.mapy}, 경도:${place.mapx})`;
+                    };
+
+                    listContainer.appendChild(div);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                loading.style.display = "none";
+                listContainer.innerHTML = "<p style='color:red;'>검색 실패 (API 키/트래픽/파라미터 확인)</p>";
+            });
+    }
+
+    // ============================================================
+    // WebSocket + 음성→텍스트(Web Speech API)
+    // ============================================================
+    let ws;
+    const exPlaces = new Set();
+
+    function renderExtracted() {
+        const ul = document.getElementById("exPlaces");
+        if (!ul) return;
+        ul.innerHTML = [...exPlaces].map(x => `<li>${x}</li>`).join("");
+    }
+
+    function connectWS() {
+        const roomId = document.getElementById("roomId").value || "default";
+        const protocol = (location.protocol === "https:") ? "wss" : "ws";
+        ws = new WebSocket(`${protocol}://${location.host}/ws/voice?roomId=${encodeURIComponent(roomId)}`);
+
+        ws.onopen = () => console.log("WS connected");
+        ws.onclose = () => console.log("WS closed");
+        ws.onerror = (e) => console.error("WS error", e);
+
+        ws.onmessage = (evt) => {
+            try {
+                const msg = JSON.parse(evt.data);
+
+                // 1) 일반 채팅(CHAT) → chatLog 누적
+                if (msg.type === "CHAT") {
+                    if (!msg.text) return;
+                    const line = `${msg.sender}: ${msg.text}\n`;
+                    const ta = document.getElementById("chatLog");
+                    ta.value += line;
+                    ta.scrollTop = ta.scrollHeight;
+                    return;
+                }
+
+                // 2) 장소 추출(PLACES) → 화면 누적
+                if (msg.type === "PLACES") {
+                    (msg.places || []).forEach(x => exPlaces.add(x));
+                    renderExtracted();
+                    return;
+                }
+
+            } catch (e) {
+                console.error("WS message parse fail", e);
+            }
+        };
+    }
+
+    // 브라우저 STT(Web Speech API)
+    let recognition;
+    let micOn = false;
+
+    function initSpeech() {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            document.getElementById("micStatus").innerText =
+                "⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다(Chrome 권장).";
+            return false;
+        }
+
+        recognition = new SR();
+        recognition.lang = "ko-KR";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onresult = (event) => {
+            let interim = "";
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const text = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    sendTranscript(text.trim());
+                } else {
+                    interim += text;
+                }
+            }
+            document.getElementById("interimText").innerText =
+                interim ? `말하는 중: ${interim}` : "";
+        };
+
+        recognition.onerror = (e) => {
+            console.error("speech error", e);
+            document.getElementById("micStatus").innerText = `⚠️ 오류: ${e.error || "unknown"}`;
+        };
+
+        recognition.onend = () => {
+            if (micOn) {
+                try { recognition.start(); } catch (e) {}
+            }
+        };
+
+        return true;
+    }
+
+    function toggleMic() {
+        if (!recognition) {
+            const ok = initSpeech();
+            if (!ok) return;
+        }
+
+        const btn = document.getElementById("btnMic");
+        const status = document.getElementById("micStatus");
+
+        micOn = !micOn;
+
+        if (micOn) {
+            try { recognition.start(); } catch (e) {}
+            btn.innerText = "마이크 끄기";
+            status.innerText = "🟢 켜짐";
+        } else {
+            try { recognition.stop(); } catch (e) {}
+            btn.innerText = "마이크 켜기";
+            status.innerText = "(꺼짐)";
+            document.getElementById("interimText").innerText = "";
+        }
+    }
+
+    function sendTranscript(text) {
+        if (!text) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const roomId = document.getElementById("roomId").value || "default";
+        const sender = document.getElementById("voiceNickname").value.trim() || "USER";
+        ws.send(JSON.stringify({ roomId, sender, text }));
+    }
+
+    // ============================================================
+    // 테스트 패널용 함수들
+    // ============================================================
+    function getSelectedTestCategories() {
+        return [...document.querySelectorAll('input[name="tCat"]:checked')]
+            .map(x => x.value)
+            .join(",");
+    }
+
+    function setTestLoading(on) {
+        const el = document.getElementById("testLoading");
+        if (!el) return;
+        el.style.display = on ? "block" : "none";
+    }
+
+    function clearTest() {
+        document.getElementById("nearbyList").innerHTML =
+            `<p class="hint">Nearby 조회를 누르면 결과가 나옵니다.</p>`;
+        document.getElementById("detailBox").innerHTML =
+            `<p class="hint">상세 조회를 누르면 결과가 나옵니다.</p>`;
+
+        const nameInput = document.getElementById("tName");
+        if (nameInput) nameInput.value = "";
+    }
+
+    // overview에 HTML 태그가 들어오는 경우 대비
+    function escapeHtml(str) {
+        return String(str)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    function renderDetail(d) {
+        const imgHtml = d.firstImage
+            ? `<img src="${d.firstImage}" class="detail-img" alt="img">`
+            : `<div class="detail-img" style="display:flex;align-items:center;justify-content:center;font-size:12px;">No Img</div>`;
+
+        document.getElementById("detailBox").innerHTML = `
+            <div class="detail-card">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    ${imgHtml}
+                    <div style="flex:1; min-width:220px;">
+                        <div style="font-weight:700; font-size:16px;">${d.title || "(제목 없음)"}</div>
+                        <div class="mono" style="margin-top:6px;">lat=${d.lat}, lng=${d.lng}</div>
+                        <div style="margin-top:6px; color:#555;">${d.addr1 || "주소 정보 없음"}</div>
+                    </div>
+                </div>
+
+                <hr style="margin:10px 0;">
+
+                <div>
+                    <b>소개글</b>
+                    <div style="white-space:pre-wrap; color:#444; margin-top:6px;">
+                        ${d.overview ? escapeHtml(d.overview) : "소개글(overview) 없음"}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function testNearby() {
+        const lat = Number(document.getElementById("tLat").value);
+        const lng = Number(document.getElementById("tLng").value);
+        const radius = Number(document.getElementById("tRadius").value);
+        const categories = getSelectedTestCategories();
+
+        if (!categories) {
+            alert("카테고리를 최소 1개 선택하세요.");
+            return;
+        }
+        if (Number.isNaN(lat) || Number.isNaN(lng) || Number.isNaN(radius)) {
+            alert("lat/lng/radius를 확인하세요.");
+            return;
+        }
+
+        setTestLoading(true);
+
+        const url = `/api/places/nearby?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&radius=${encodeURIComponent(radius)}&categories=${encodeURIComponent(categories)}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(list => {
+                setTestLoading(false);
+
+                const box = document.getElementById("nearbyList");
+                if (!list || list.length === 0) {
+                    box.innerHTML = `<p>결과가 없습니다.</p>`;
+                    return;
+                }
+
+                box.innerHTML = "";
+                list.forEach(p => {
+                    const div = document.createElement("div");
+                    div.className = "attraction-item";
+                    div.setAttribute("data-category", "nearby");
+
+                    div.innerHTML = `
+                        <div style="flex:1;">
+                            <strong>${p.title}</strong>
+                            <div class="mono">lat=${p.lat}, lng=${p.lng}</div>
+                            <div class="mono">category=${p.category}</div>
+                            <div class="mono">contentId=${p.contentId || "-"}</div>
+                        </div>
+                    `;
+
+                    // 클릭하면 "로딩 표시" 후 contentId로 상세조회 → 사진/소개글/주소/이름/위경도 출력
+                    div.onclick = () => {
+                        document.querySelectorAll('.attraction-item[data-category="nearby"]')
+                            .forEach(x => x.classList.remove("selected"));
+                        div.classList.add("selected");
+
+                        if (!p.contentId) {
+                            alert("contentId가 없어 상세 조회를 할 수 없습니다.");
+                            return;
+                        }
+
+                        //  클릭 즉시 상세 영역에 로딩 메시지
+                        document.getElementById("detailBox").innerHTML =
+                            `<p class="hint">📡 상세정보 불러오는 중...</p>`;
+
+                        testDetailByContentId(p.contentId); // 기존 호출 유지
+                    };
+
+                    box.appendChild(div);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                setTestLoading(false);
+                document.getElementById("nearbyList").innerHTML =
+                    `<p style="color:red;">Nearby 호출 실패 (백엔드 로그 확인)</p>`;
+            });
+    }
+
+    function testDetail() {
+        const lat = Number(document.getElementById("tLat").value);
+        const lng = Number(document.getElementById("tLng").value);
+
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+            alert("lat/lng를 확인하세요.");
+            return;
+        }
+
+        setTestLoading(true);
+
+        const url = `/api/place/detail?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`;
+
+        fetch(url)
+            .then(async res => {
+                setTestLoading(false);
+                if (!res.ok) {
+                    document.getElementById("detailBox").innerHTML =
+                        `<p style="color:red;">상세 결과 없음 (HTTP ${res.status}) 또는 오류</p>`;
+                    return null;
+                }
+                return res.json();
+            })
+            .then(d => {
+                if (!d) return;
+                renderDetail(d);
+            })
+            .catch(err => {
+                console.error(err);
+                setTestLoading(false);
+                document.getElementById("detailBox").innerHTML =
+                    `<p style="color:red;">상세 호출 실패 (백엔드 로그 확인)</p>`;
+            });
+    }
+
+    function testDetailByContentId(contentId) {
+        if (!contentId) {
+            alert("contentId가 없습니다.");
+            return;
+        }
+
+        setTestLoading(true);
+
+        // 백엔드: /api/place/detail?contentId=...
+        const url = `/api/place/detail?contentId=${encodeURIComponent(contentId)}`;
+
+        fetch(url)
+            .then(async res => {
+                setTestLoading(false);
+                if (!res.ok) {
+                    document.getElementById("detailBox").innerHTML =
+                        `<p style="color:red;">상세 결과 없음 (HTTP ${res.status}) 또는 오류</p>`;
+                    return null;
+                }
+                return res.json();
+            })
+            .then(d => {
+                if (!d) return;
+                renderDetail(d);
+                if (d.lat != null && d.lng != null) {
+                    document.getElementById("tLat").value = d.lat;
+                    document.getElementById("tLng").value = d.lng;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                setTestLoading(false);
+                document.getElementById("detailBox").innerHTML =
+                    `<p style="color:red;">상세 호출 실패 (백엔드 로그 확인)</p>`;
+            });
+    }
+
+    function testDetailByName() { // 깨져있던 코드 정상화
+        const name = (document.getElementById("tName")?.value || "").trim();
+        if (!name) {
+            alert("장소 이름을 입력하세요.");
+            return;
+        }
+
+        setTestLoading(true);
+
+        const url = `/api/place/detail-by-name?name=${encodeURIComponent(name)}`;
+
+        fetch(url)
+            .then(async res => {
+                setTestLoading(false);
+                if (!res.ok) {
+                    document.getElementById("detailBox").innerHTML =
+                        `<p style="color:red;">이름 상세 조회 실패 (HTTP ${res.status})</p>`;
+                    return null;
+                }
+                return res.json();
+            })
+            .then(d => {
+                if (!d) return;
+                renderDetail(d);
+
+                if (d.lat != null && d.lng != null) {
+                    document.getElementById("tLat").value = d.lat;
+                    document.getElementById("tLng").value = d.lng;
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                setTestLoading(false);
+                document.getElementById("detailBox").innerHTML =
+                    `<p style="color:red;">이름 상세 호출 실패 (백엔드 로그 확인)</p>`;
+            });
+    }
+
+    // ============================================================
+    // DOMContentLoaded: 한 번에 초기화(WS 연결 + 검색 엔터)
+    // ============================================================
+    document.addEventListener("DOMContentLoaded", () => {
+        // WS 연결
+        connectWS();
+
+        // 검색 엔터
+        const input = document.getElementById("searchKeyword");
+        if (input) {
+            input.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    searchPlaces();
+                }
+            });
+        }
+    });
+</script>
+</body>
+</html>
