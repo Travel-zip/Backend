@@ -35,6 +35,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
+        // [추가할 코드] OPTIONS 요청은 무조건 그냥 통과시키고 끝내기
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String auth = request.getHeader("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) {
             String token = auth.substring("Bearer ".length()).trim();
