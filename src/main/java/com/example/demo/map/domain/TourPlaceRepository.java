@@ -11,5 +11,5 @@ public interface TourPlaceRepository extends JpaRepository<TourPlaceEntity, Long
 
     boolean existsByRoom_RoomIdAndTitleAndLatAndLng(String roomId, String title, Double lat, Double lng);
 
-
+    void deleteByRoom_RoomId(String roomId);
 }

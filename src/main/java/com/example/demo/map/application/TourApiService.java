@@ -177,7 +177,8 @@ public class TourApiService {
                         it.getMapy(),
                         it.getMapx(),
                         c.key(),
-                        it.getContentid()
+                        it.getContentid(),
+                        it.getFirstimage() // [사진추가] TourAPI 대표 이미지
                 ));
             }
         }

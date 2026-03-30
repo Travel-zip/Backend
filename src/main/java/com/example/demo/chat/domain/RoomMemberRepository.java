@@ -52,4 +52,6 @@ public interface RoomMemberRepository extends JpaRepository<RoomMemberEntity, Lo
                     rm.joinedAt asc
            """) // [추가]
     List<RoomMemberRow> findMembersByRoomIds(@Param("roomIds") List<String> roomIds); // [추가]
+
+    void deleteByRoom_RoomId(String roomId);
 }

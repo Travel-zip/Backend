@@ -38,6 +38,7 @@ public class TourPlaceService {
             e.setTitle(dto.getTitle());
             e.setLat(lat);
             e.setLng(lng);
+            e.setImageUrl(dto.getFirstimage()); // [사진추가] Search 결과 이미지
 
 
             tourRepo.save(e);
@@ -62,6 +63,7 @@ public class TourPlaceService {
             e.setTitle(dto.getTitle());
             e.setLat(dto.getLat());
             e.setLng(dto.getLng());
+            e.setImageUrl(dto.getImageUrl()); // [사진추가] Nearby 결과 이미지
 
 
             tourRepo.save(e);
@@ -73,7 +75,8 @@ public class TourPlaceService {
         List<TourPlaceEntity> list = tourRepo.findByRoom_RoomIdOrderByCreatedAtDesc(roomId);
         return list.stream()
                 .limit(limit)
-                .map(p -> "- " + p.getTitle() + " (lat=" + p.getLat() + ", lng=" + p.getLng() + ")")
+                .map(p -> "- " + p.getTitle() + " (lat=" + p.getLat() + ", lng=" + p.getLng()
+                        +", image=" + (p.getImageUrl() != null ? p.getImageUrl() : "")+ ")")  // [사진추가]
                 .reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
     }
 }

@@ -8,4 +8,6 @@ public interface TravelPlanRepository extends JpaRepository<TravelPlanEntity, Lo
 
 
     Optional<TravelPlanEntity> findTopByRoom_RoomIdOrderByCreatedAtDesc(String roomId);
+
+    void deleteByRoom_RoomId(String roomId);
 }

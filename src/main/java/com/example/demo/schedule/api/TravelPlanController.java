@@ -152,6 +152,7 @@ public class TravelPlanController {
                       "place": string,
                       "lat": number,
                       "lng": number,
+                      "imageUrl": string, 
                       "memo": string
                     }
                   ]
@@ -160,6 +161,7 @@ public class TravelPlanController {
                 items 작성 규칙:
                 - 모든 항목은 동일한 구조만 사용한다. (type 같은 분기 금지)
                 - items는 시간 순서대로 정렬한다.
+                - 제공된 장소 후보의 image 값이 있다면 imageUrl에 그대로 넣어줘.(없으면 빈 문자열 "") // [사진추가]
                 - memo는 채팅 로그 기반으로 자연스럽게 풍성하게 작성한다.
                   (예: "사진 많이 찍기", "대표 메뉴 먹기", "체크인 후 휴식", "근처 산책" 등)
                 - 단, memo에 교통수단/거리/요금/소요시간 같은 교통 정보는 넣지 마.

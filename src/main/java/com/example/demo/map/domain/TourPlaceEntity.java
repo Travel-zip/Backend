@@ -42,6 +42,9 @@ public class TourPlaceEntity {
     @Column(nullable = false)
     private Double lng;
 
+    @Column(name = "image_url", length = 1000) // [사진추가]
+    private String imageUrl; // [사진추가]
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

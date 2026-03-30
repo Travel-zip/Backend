@@ -3,6 +3,8 @@ package com.example.demo.chat.application;
 import com.example.demo.auth.api.ApiException;
 import com.example.demo.auth.domain.UserRepository;
 import com.example.demo.chat.domain.*;
+import com.example.demo.map.domain.TourPlaceRepository;
+import com.example.demo.schedule.domain.TravelPlanRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,11 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final UserRepository userRepository; // 방장 user 조회용
     private final RoomMemberRepository roomMemberRepository;
+
+    private final ChatMessageRepository chatMessageRepository;
+    private final TourPlaceRepository tourPlaceRepository;
+    private final TravelPlanRepository travelPlanRepository;
+
 
     public RoomEntity getOrCreate(String roomId) {
         return roomRepository.findById(roomId).orElseGet(() -> {
@@ -190,5 +197,30 @@ public class RoomService {
     public RoomEntity getRequired(String roomId) {
         return roomRepository.findById(roomId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ROOM_NOT_FOUND", "방을 찾을 수 없습니다."));
+    }
+
+    @Transactional
+    public void deleteRoom(String roomId, Long userId) {
+        if (userId == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "로그인이 필요합니다.");
+        }
+
+        // 1. 방 찾기
+        RoomEntity room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ROOM_NOT_FOUND", "방을 찾을 수 없습니다."));
+
+        // 2. 권한 체크 (방장인지 확인)
+        if (room.getHost() == null || !room.getHost().getId().equals(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "방장만 방을 삭제할 수 있습니다.");
+        }
+
+        // 3. 엮여있는 자식 데이터들 먼저 싹 청소 (순서 무관)
+        chatMessageRepository.deleteByRoom_RoomId(roomId);
+        tourPlaceRepository.deleteByRoom_RoomId(roomId);
+        travelPlanRepository.deleteByRoom_RoomId(roomId);
+        roomMemberRepository.deleteByRoom_RoomId(roomId);
+
+        // 4. 마지막으로 방 자체를 삭제
+        roomRepository.delete(room);
     }
 }

@@ -148,4 +148,13 @@ public class RoomApiController {
 
     //  단순 OK 응답
     public record SimpleOk(boolean ok) {}
+
+    @DeleteMapping("/{roomId}")
+    public SimpleOk deleteRoom(@PathVariable String roomId, HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute(AuthRequestAttr.USER_ID);
+
+        roomService.deleteRoom(roomId, userId);
+
+        return new SimpleOk(true);
+    }
 }

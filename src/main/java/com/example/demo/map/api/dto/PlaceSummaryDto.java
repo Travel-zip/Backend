@@ -13,4 +13,6 @@ public class PlaceSummaryDto {
     private String category; // attraction/culture/...
 
     private String contentId; // TourAPI 콘텐츠ID(상세조회 정확도용)
+
+    private String imageUrl; // [사진추가]
 }
