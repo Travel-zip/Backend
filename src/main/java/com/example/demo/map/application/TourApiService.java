@@ -88,8 +88,6 @@ public class TourApiService {
     }
 
 
-
-
     // =========================================================
     // [NEARBY 기능] locationBasedList2 호출 래퍼
     // - centerLat/centerLng/radius 기준으로 주변 목록을 가져옴
@@ -130,6 +128,7 @@ public class TourApiService {
                     response.getResponse().getBody().getItems() != null &&
                     response.getResponse().getBody().getItems().getItem() != null) {
                 return response.getResponse().getBody().getItems().getItem();
+
             }
             return Collections.emptyList();
 
@@ -251,6 +250,10 @@ public class TourApiService {
     // - 그래서 locationBasedList2로 후보를 받고(반경 제한)
     // - 서버에서 keyword(title/addr1)로 필터링
     // =========================================================
+
+    // [수정] 검색 기능 전용 고정 반경 설정 (5km = 5000m)
+    private static final int SEARCH_FIXED_RADIUS = 5000;
+
     public List<TourApiDto.Item> searchByKeywordWithinRadius(
             double centerLat, double centerLng, int radiusMeters,
             String contentTypeId,
@@ -258,9 +261,14 @@ public class TourApiService {
     ) {
         if (keyword == null || keyword.isBlank()) return List.of();
 
+        // [수정] 프론트엔드에서 넘어온 반경(radiusMeters)을 무시하고 강제로 5km(5000m) 적용
+        int searchRadius = SEARCH_FIXED_RADIUS;
+
+
         //  반경 내 후보를 넉넉히 가져온 뒤 필터링 (너무 크게 잡으면 비용↑)
         // 필요하면 100~200 조절
-        List<TourApiDto.Item> candidates = locationBasedList(centerLat, centerLng, radiusMeters, contentTypeId,  SEARCH_CANDIDATE_ROWS);
+        // [수정] 파라미터에 radiusMeters 대신 searchRadius를 넣습니다.
+        List<TourApiDto.Item> candidates = locationBasedList(centerLat, centerLng, searchRadius, contentTypeId,  SEARCH_CANDIDATE_ROWS);
 
         if (candidates == null || candidates.isEmpty()) return List.of();
 

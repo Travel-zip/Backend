@@ -48,10 +48,10 @@ public class PlaceApiController {
                                              //  @RequestParam(required = false) String sigunguCode
                                          ) {
 
-        // 값 검증(너무 큰 반경 방지)
-        if (radius < 50 || radius > 2500) { // 필요하면 범위 조절
+        // [수정] 검색 반경이 5km(5000m)로 확장되었으므로 검증 허용치도 5000으로 늘려줍니다.
+        if (radius < 50 || radius > 5000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "radius는 50~2500(m) 범위로 입력하세요.");
+                    "radius는 50~5000(m) 범위로 입력하세요."); // [수정] 에러 메시지 변경
         }
 
         String rid = (roomId == null || roomId.isBlank()) ? "default" : roomId;
