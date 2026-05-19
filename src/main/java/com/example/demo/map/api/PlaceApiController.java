@@ -8,12 +8,12 @@ import com.example.demo.map.application.TourPlaceService;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 // 기존 AttractionController 역할 확장(관광/맛집/숙박 + 시군구)
 @RestController
@@ -122,6 +122,49 @@ public class PlaceApiController {
         return results;
 
 
+    }
+
+    // =========================================================
+    // [추가] 프론트에서 특정 장소를 수동으로 tour_places에 추가
+    // =========================================================
+    @PostMapping("/api/places")
+    public ResponseEntity<?> addCustomPlace(@RequestBody PlaceAddRequestDto request) {
+        // 필수 파라미터 검증
+        if (request.getTitle() == null || request.getTitle().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "장소 이름(title)은 필수입니다.");
+        }
+        if (request.getLat() == null || request.getLng() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "위도(lat)와 경도(lng)는 필수입니다.");
+        }
+
+        // Service 호출하여 DB에 저장
+        tourPlaceService.addManualPlace(request);
+
+        // 프론트엔드가 처리하기 쉽게 간단한 성공 JSON 응답 반환
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "장소가 성공적으로 추가되었습니다."
+        ));
+    }
+
+    // =========================================================
+    // [추가] 프론트에서 여러 장소를 한 번에 tour_places에 일괄 추가
+    // URL 구분을 위해 /bulk 를 붙여줍니다.
+    // =========================================================
+    @PostMapping("/api/places/bulk")
+    public ResponseEntity<?> addCustomPlacesBulk(@RequestBody PlaceAddListRequestDto request) {
+        // 파라미터 검증
+        if (request.getPlaces() == null || request.getPlaces().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "추가할 장소 목록(places)이 비어있습니다.");
+        }
+
+        // Service 호출하여 DB에 일괄 저장
+        tourPlaceService.addManualPlaces(request);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", request.getPlaces().size() + "개의 장소가 성공적으로 확인/추가 되었습니다."
+        ));
     }
 
 
