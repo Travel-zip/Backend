@@ -48,7 +48,9 @@ public class EnnoiaProxyController {
             System.out.println("🚀 엔노이아 서버로 요청 쏘는 중...");
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             System.out.println("✅ 엔노이아 응답 성공!");
-            return response;
+
+            // 🌟 [핵심 해결책] Nginx의 chunked 에러 방지를 위해, 헤더를 다 버리고 '순수 바디 내용'만 새로운 200 OK로 다시 포장해서 리턴합니다!
+            return ResponseEntity.ok().body(response.getBody());
         } catch (Exception e) {
             System.out.println("❌ 엔노이아 통신 실패: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
