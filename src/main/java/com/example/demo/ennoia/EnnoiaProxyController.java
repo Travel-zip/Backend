@@ -10,6 +10,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ennoia")
+@CrossOrigin(origins = "*") // 🌟 프론트엔드 CORS 에러 해결 치트키
 public class EnnoiaProxyController {
 
     @Value("${ennoia.api-key}")
@@ -23,6 +24,9 @@ public class EnnoiaProxyController {
 
     @PostMapping("/chat")
     public ResponseEntity<String> chatProxy(@RequestBody Map<String, Object> requestBody) {
+        // 🌟 [핵심] 프론트에서 우리 서버로 요청이 무사히 도착했는지 터미널에서 확인하기 위한 로그!
+        System.out.println("🟢 [프록시 성공] 프론트엔드에서 요청이 정상적으로 들어왔습니다!");
+
         String url = "https://api.ennoia.so/api/preset/v2/chat/completions";
         RestTemplate restTemplate = new RestTemplate();
 
@@ -31,25 +35,24 @@ public class EnnoiaProxyController {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("apiKey", apiKey);
         headers.set("project", project);
-
-        // 헤더 유저 ID 세팅 (유진님 인증키 값 주입)
         headers.set("X-ENNOIA-USER-ID", userId);
 
-        // 🚨 (주의) HTTP 헤더 인코딩 문제 방지를 위해 기존 'x-mcp-한국관광공사-authorization'은 깨끗하게 삭제했습니다!
-
-        // 🚀 [최종 필살기] 요청 바디(JSON) 최상단에 userId 값을 직접 강제 추가
+        // 2. 바디에 userId 강제 주입
         requestBody.put("userId", userId);
 
-        // 2. 헤더와 바디 결합
+        // 3. 헤더와 바디 결합
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-        // 3. 외부 API(엔노이아)로 요청 전송
+        // 4. 외부 API(엔노이아)로 요청 전송
         try {
-            return restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            System.out.println("🚀 엔노이아 서버로 요청 쏘는 중...");
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            System.out.println("✅ 엔노이아 응답 성공!");
+            return response;
         } catch (Exception e) {
+            System.out.println("❌ 엔노이아 통신 실패: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("{\"error\": \"Proxy failed\", \"reason\": \"" + e.getMessage() + "\"}");
         }
     }
 }
-
